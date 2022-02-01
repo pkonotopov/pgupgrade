@@ -1,0 +1,74 @@
+version: "3.7"
+services:
+  consul:
+    image: consul:latest
+    command:
+      - 'consul'
+      - 'agent' 
+      - '-data-dir=/consul/data'
+      - '-config-dir=/consul/config'
+      - '-server'
+      - '-ui'
+      - '-node=consul'
+      - '-bootstrap-expect=1'
+      - '-client=0.0.0.0'
+    ports:
+      - '8300:8300'
+      - '8301:8301'
+      - '8301:8301/udp'
+      - '8500:8500'
+      - '8600:8600'
+      - '8600:8600/udp'
+    volumes:
+      - consul:/consul/data
+    networks:
+      - cluster
+
+  postgres-1:
+    image: pg-gis-walg:13.5-2.5-1.1-bullseye
+    command: '/var/lib/postgresql/.local/bin/patroni /etc/patroni/patroni.yml'
+    volumes:
+      - /tmp/cluster/postgres-1/data:/var/lib/postgresql/data
+      - ./patroni/patroni-walg-13-1.yml:/etc/patroni/patroni.yml:ro
+      - ./sql:/var/lib/postgresql/sql:ro
+      - ./patroni/server-s3.conf:/etc/walg/server-s3.conf:ro
+    networks:
+      - cluster
+
+  postgres-2:
+    image: pg-gis-walg:13.5-2.5-1.1-bullseye
+    command: '/var/lib/postgresql/.local/bin/patroni /etc/patroni/patroni.yml'
+    volumes:
+      - /tmp/cluster/postgres-2/data:/var/lib/postgresql/data
+      - ./sql:/var/lib/postgresql/sql:ro
+      - ./patroni/patroni-walg-13-2.yml:/etc/patroni/patroni.yml:ro
+      - ./patroni/server-s3.conf:/etc/walg/server-s3.conf:ro
+    networks:
+      - cluster
+
+  minio:
+    image: minio/minio
+    command: 
+      - 'server'
+      - '--address=0.0.0.0:9000'
+      - '--console-address=0.0.0.0:9010'
+      - '/data'
+    volumes:
+      - minio:/data
+    ports:
+      - "9000:9000"
+      - "9010:9010"
+    environment:
+      MINIO_ROOT_USER: ACCESSKEY
+      MINIO_ROOT_PASSWORD: SECRETKEY
+    networks:
+      - cluster
+
+volumes:
+    minio:
+    consul:
+      driver: local
+
+networks:
+  cluster:
+    external: true

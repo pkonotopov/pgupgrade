@@ -1,0 +1,64 @@
+ARG PG_MAJOR_OLD
+ARG PG_MINOR_OLD
+ARG DEBIAN_VER
+
+FROM postgres:${PG_MAJOR_OLD}.${PG_MINOR_OLD}-${DEBIAN_VER}
+
+ARG DEBIAN_VER
+ARG PG_MAJOR_OLD
+ARG PG_MAJOR_NEW
+ARG POSTGIS_MAJOR
+ARG POSTGIS_VERSION
+ARG PG_PROFILE_VERSION
+
+ENV PG_MAJOR_OLD=${PG_MAJOR_OLD} \
+    PG_MAJOR_NEW=${PG_MAJOR_NEW} \
+    DEBIAN_VER=${DEBIAN_VER} \
+    PGDATAOLD=/var/lib/postgresql/data/${PG_MAJOR_OLD} \
+    PGDATANEW=/var/lib/postgresql/data/${PG_MAJOR_NEW} \
+    PGBINOLD=/usr/lib/postgresql/${PG_MAJOR_OLD}/bin \
+    PGBINNEW=/usr/lib/postgresql/${PG_MAJOR_NEW}/bin \
+    POSTGIS_VERSION=${POSTGIS_VERSION} \
+    PGHOME=/var/lib/postgresql
+
+RUN set -ex \
+    && usermod -u 2001 postgres \
+    && groupmod -g 2001 postgres \
+    && apt-get update \
+    && apt-get install -y wget \
+    && printf "deb https://apt-archive.postgresql.org/pub/repos/apt ${DEBIAN_VER}-pgdg-archive main" >> /etc/apt/sources.list.d/pgdg.list \
+    && wget -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y \
+        wget curl \
+        postgresql-${PG_MAJOR_NEW} \
+    && apt-get install -y \
+        python3-psycopg2 \
+        python3-pip \
+        postgresql-${PG_MAJOR_OLD}-postgis-${POSTGIS_MAJOR}=${POSTGIS_VERSION} \
+        postgresql-${PG_MAJOR_OLD}-postgis-${POSTGIS_MAJOR}-scripts \
+        postgresql-${PG_MAJOR_OLD}-wal2json \
+        postgresql-${PG_MAJOR_OLD}-repack \
+        postgresql-${PG_MAJOR_NEW}-postgis-${POSTGIS_MAJOR}=${POSTGIS_VERSION} \
+        postgresql-${PG_MAJOR_NEW}-postgis-${POSTGIS_MAJOR}-scripts \
+        postgresql-${PG_MAJOR_NEW}-wal2json \
+        postgresql-${PG_MAJOR_NEW}-repack \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && cd /usr/src \
+    && wget -q https://github.com/zubkov-andrei/pg_profile/releases/download/${PG_PROFILE_VERSION}/pg_profile--${PG_PROFILE_VERSION}.tar.gz \
+    && tar xzf pg_profile--${PG_PROFILE_VERSION}.tar.gz --directory $(/usr/lib/postgresql/${PG_MAJOR_OLD}/bin/pg_config --sharedir)/extension \
+    && tar xzf pg_profile--${PG_PROFILE_VERSION}.tar.gz --directory $(/usr/lib/postgresql/${PG_MAJOR_NEW}/bin/pg_config --sharedir)/extension \
+    && rm -rf /usr/src/pg_profile--${PG_PROFILE_VERSION}.tar.gz
+
+COPY entrypoint.sh postgresql-upgrade.sh ${PGHOME}
+
+RUN chown postgres:postgres ${PGHOME}/postgresql-upgrade.sh ${PGHOME}/entrypoint.sh
+
+USER postgres
+
+WORKDIR $HOME
+
+RUN pip3 install --no-cache-dir --user patroni[raft,consul] python-consul2
+
+ENTRYPOINT ["/bin/sh","/var/lib/postgresql/entrypoint.sh","--upgrade"]

@@ -1,0 +1,151 @@
+---
+scope: Citydrive
+name: postgres-1
+
+log:
+  level: INFO
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: postgres-1:8008
+
+  ctl:
+    insecure: true
+
+consul:
+  register_service: true
+  url: http://consul:8500
+
+
+bootstrap:
+  dcs:
+    loop_wait: 5
+    master_start_timeout: 0
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      parameters:
+        archive_command: '/etc/walg/wal-push.sh %p'
+        archive_mode: 'on'
+        archive_timeout: 1800s
+        restore_command: '/etc/walg/wal-fetch.sh %f %p'
+        autovacuum_analyze_threshold: '500'
+        autovacuum_max_workers: '1'
+        autovacuum_naptime: '10'
+        autovacuum_vacuum_scale_factor: '0.1'
+        autovacuum_vacuum_threshold: '500'
+        client_min_messages: NOTICE
+        effective_cache_size: 16GB
+        hot_standby: 'on'
+        hot_standby_feedback: 'on'
+        idle_in_transaction_session_timeout: '300000'
+        lock_timeout: '30000'
+        log_connections: 'on'
+        log_destination: stderr
+        log_disconnections: 'on'
+        log_duration: 'on'
+        log_lock_waits: 'on'
+        log_min_duration_statement: '3000'
+        log_min_error_statement: NOTICE
+        log_min_messages: NOTICE
+        logging_collector: 'off'
+        maintenance_work_mem: 2GB
+        max_connections: '2000'
+        max_replication_slots: '20'
+        max_wal_senders: '20'
+        max_worker_processes: '24'
+        pg_profile.max_sample_age: 60
+        pg_profile.topn: 50
+        pg_profile.track_sample_timings: true
+        pg_stat_statements.track: all
+        port: '5432'
+        shared_buffers: 8GB
+        shared_preload_libraries: pg_stat_statements
+        statement_timeout: '3600000'
+        wal_compression: 'off'
+        wal_keep_segments: 1024
+        wal_level: logical
+        wal_log_hints: 'on'
+        wal_sender_timeout: '60000'
+        work_mem: 1GB
+      use_pg_rewind: true
+      use_slots: true
+    retry_timeout: 10
+    slots:
+      bot:
+        database: bot
+        plugin: pgoutput
+        type: logical
+      control_room:
+        database: control-room
+        plugin: pgoutput
+        type: logical
+      cs:
+        database: cs
+        plugin: pgoutput
+        type: logical
+      rating:
+        database: rating
+        plugin: pgoutput
+        type: logical
+      repair:
+        database: repair
+        plugin: pgoutput
+        type: logical
+    ttl: 25
+    method: walg
+    walg:
+      command: '/etc/walg/backup-fetch.sh /var/lib/postgresql/data/13 LATEST'
+      recovery_conf:
+        restore_command: '/etc/walg/wal-fetch.sh %f %p'
+        recovery_target_timeline: latest
+        recovery_target_action: promote
+        recovery_target_time: ''
+
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+
+  pg_hba:
+  - local all all trust
+  - host replication replicator 0.0.0.0/0 trust
+  - host all all 0.0.0.0/0 trust
+
+  users:
+      admin:
+        password: admin
+        options: ['createrole', 'createdb']
+      replicator:
+        password: replicator
+        options: ['superuser']
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: postgres-1:5432
+  data_dir: /var/lib/postgresql/data/13/
+  bin_dir: /usr/lib/postgresql/13/bin/
+  authentication:
+    replication:
+      username: replicator
+      password: replicator
+    superuser:
+      username: admin
+      password: admin
+  parameters:
+    unix_socket_directories: '/run/postgresql'
+  pg_hba:
+    - local all all trust
+    - host replication replicator 0.0.0.0/0 trust
+    - host all all 0.0.0.0/0 trust
+  create_replica_methods:
+    - walg
+  walg:
+    command: '/etc/walg/backup-fetch.sh /var/lib/postgresql/data/13 LATEST'
+    no_params: True
+    keep_data: False
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+watchdog:
+  mode: off
